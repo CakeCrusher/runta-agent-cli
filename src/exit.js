@@ -7,7 +7,7 @@ export const EXIT = {
   notFound: 4, // 404
   conflict: 5, // 409/412: wrong state, retry after fixing it
   unavailable: 6, // 429/5xx after retries
-  timeout: 7, // --wait or exec --timeout ran out; the operation may still finish
+  timeout: 7, // --wait ran out; the operation may still finish (exec uses 124, like timeout(1))
   confirm: 8, // destructive command refused without --yes
   failedState: 9, // --wait saw the resource end in a failed state (e.g. run failed)
 };

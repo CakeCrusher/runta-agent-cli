@@ -207,7 +207,7 @@ export function guide(spec, groups) {
     notFound: "not found",
     conflict: "wrong state for this action (e.g. paused runtime); fix the state and retry",
     unavailable: "rate limited or temporarily unavailable after retries",
-    timeout: "--wait or exec --timeout ran out; the operation may still finish",
+    timeout: "--wait ran out; the operation may still finish",
     confirm: "destructive command refused: re-run with --yes if the user asked for it",
     failedState: "--wait finished, but the resource ended in a failed state",
   };
