@@ -21,7 +21,7 @@ change.
 ## 0.1.2: gaps found by the benchmark
 
 After the first benchmark round (Codex agents on 11 tasks), every error agents hit with this CLI was traced to its
-cause. Five were missing API knowledge, so they are fixed here, worded for any task rather than the benchmark's:
+cause. Six were API knowledge the spec never stated, so they are added here, worded for any task rather than the benchmark's:
 
 | Change | Why (evidence) |
 |---|---|
