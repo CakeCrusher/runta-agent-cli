@@ -32,6 +32,21 @@ cause. Six were API knowledge the spec never stated, so they are added here, wor
 | Workspace operation paths are relative to the home directory; the files API also accepts home-relative paths | 422 "path must be relative to the guest home directory" on `--path /` |
 | `createCloudAgentRun`: runs have no server-side time or spend limit and report no cost; enforce a time limit with a wait timeout plus `cancelCloudAgentRun` | An agent asked for a capped unattended run read the spec, found no cap, and refused to start |
 
+### Known issues in 0.1.2 (found by benchmark Round 2)
+
+Round 2 reran the benchmark on 0.1.2. The errors above went from 11 occurrences to 1, but two descriptions turned out
+to be true and incomplete, and both changed what agents did:
+
+- The `model_provider_protocol` text names the environment injection agent images require without saying that an
+  environment injection puts the secret's value inside the VM (verified with a dummy secret). The overview's "the VM
+  only sees a placeholder" holds only for egress injections. An agent asked to keep a key hidden built this
+  configuration, found its key exposed, and stopped.
+- "The API reports no cost" is incomplete: `listCloudAgentSessionEvents` reports token usage per model message; only
+  its `cost` fields read 0. An agent asked to report a run's cost answered "unavailable".
+
+Also found: every process an exec session starts is killed when the session ends (`nohup`, `setsid` and `&` included),
+so a server has to run as a systemd unit. The spec only says a disconnect kills the command.
+
 ## Extensions the CLI reads
 
 | Extension | Where | Meaning |
