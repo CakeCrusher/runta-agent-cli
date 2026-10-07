@@ -164,3 +164,46 @@ export function closest(name, candidates) {
   }
   return best?.c || null;
 }
+
+// Verbs other CLIs (and agents) use for the action a generated command performs.
+const SYNONYMS = {
+  upload: "write", put: "write", download: "read", cat: "read", ls: "list", ps: "list", rm: "delete", remove: "delete",
+  del: "delete", inspect: "get", show: "get", describe: "get", info: "get", new: "create", add: "create", run: "create",
+  kill: "stop", halt: "stop",
+};
+
+export function suggestCommand(group, name) {
+  const names = [...group.commands.keys()];
+  const [verb, ...rest] = name.split("-");
+  const mapped = [SYNONYMS[verb] || verb, ...rest].join("-");
+  if (group.commands.has(mapped)) return mapped;
+  const prefixed = names.filter((n) => n.startsWith(mapped + "-"));
+  if (prefixed.length === 1) return prefixed[0];
+  return closest(mapped, names) || closest(name, names);
+}
+
+// The official CLI's top-level verbs all act on runtimes (or files); point their habits at the generated commands.
+export const OFFICIAL_VERBS = {
+  ps: "runtimes list", run: "runtimes create", rm: "runtimes delete", inspect: "runtimes get", exec: "runtimes exec",
+  pause: "runtimes pause", resume: "runtimes resume", boot: "runtimes start", shutdown: "runtimes stop",
+  cp: "files write / files read", ports: "runtimes patch (--ingress-specs)",
+};
+
+// Commands whose name, flags or summary mention a word, best matches first ("ingress" -> create/patch via --ingress-specs).
+export function relatedCommands(spec, groups, word, { only, limit = 3 } = {}) {
+  const w = word.toLowerCase().replace(/^-+/, "").replace(/-/g, "_");
+  if (w.length < 3) return [];
+  const hits = [];
+  for (const g of groups.values()) {
+    if (only && g !== only) continue;
+    for (const c of g.commands.values()) {
+      const body = c.body?.schema ? deref(spec, c.body.schema) : {};
+      const props = Object.keys({ ...(body.properties || {}), ...Object.assign({}, ...[...(body.oneOf || []), ...(body.allOf || [])].map((b) => b.properties || {})) });
+      const flags = [...c.params.map((p) => p.name), ...props];
+      const flagHit = flags.find((f) => f.toLowerCase().includes(w));
+      const score = c.name.replace(/-/g, "_").includes(w) ? 3 : flagHit ? 2 : c.summary.toLowerCase().includes(w.replace(/_/g, " ")) ? 1 : 0;
+      if (score) hits.push({ score, text: `runta ${g.name} ${c.name}${flagHit ? ` (--${kebab(flagHit)})` : ""}` });
+    }
+  }
+  return hits.sort((a, b) => b.score - a.score).slice(0, limit).map((h) => h.text);
+}

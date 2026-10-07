@@ -158,3 +158,35 @@ test("exec --max-output prints up to the limit, then says it stopped", async () 
   assert.equal(r.stdout, "echo");
   assert.match(r.stderr, /output truncated after 4 bytes/);
 });
+
+test("--data @- and --data - read the body from stdin; an unreadable file is a usage error", async () => {
+  for (const src of ["@-", "-"]) {
+    await run(["runtimes", "create", "--data", src], { input: JSON.stringify({ name: `from-stdin${src}` }) });
+    const call = api.calls.findLast((c) => c.method === "POST" && c.path === "/v2/runtimes");
+    assert.equal(call.body.name, `from-stdin${src}`);
+  }
+  const bad = await run(["runtimes", "create", "--data", "@/nonexistent/body.json"]);
+  assert.equal(bad.code, 2);
+  assert.match(bad.json().error.message, /cannot read --data .*ENOENT/);
+});
+
+test("unknown commands suggest by common verb synonyms and by related flags", async () => {
+  const upload = await run(["files", "upload"]);
+  assert.equal(upload.code, 2);
+  assert.match(upload.json().error.message, /files write/);
+  assert.match((await run(["runtimes", "ls"])).json().error.message, /runtimes list/);
+  assert.match((await run(["ps"])).json().error.message, /runta runtimes list/);
+  assert.match((await run(["runtimes", "ingress"])).json().error.message, /--ingress-specs/);
+});
+
+test("schema suggests a valid command on a typo; spec says where the bundled document is", async () => {
+  const s = await run(["schema", "runtimes", "lst"]);
+  assert.equal(s.code, 2);
+  assert.match(s.stdout + s.stderr, /runtimes list/);
+  const spec = await run(["spec"]);
+  assert.equal(spec.code, 0);
+  const out = spec.json();
+  const doc = JSON.parse(readFileSync(out.path, "utf8"));
+  const ops = Object.values(doc.paths).flatMap((p) => Object.values(p)).filter((o) => o && o.operationId);
+  assert.equal(out.operations, ops.length);
+});

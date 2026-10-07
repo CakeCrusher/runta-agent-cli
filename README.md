@@ -17,7 +17,7 @@ hand-written CLI code. This CLI therefore has three layers:
 
 1. **Runta's OpenAPI spec, as published** (`spec/runta-openapi.original.yaml`). Every operation becomes a
    command at runtime: `runta <group> <command>`, path parameters positional, query parameters and body fields
-   as `--flags`. No per-endpoint code, so all 82 operations are covered, including Cloud Agents (none of which
+   as `--flags`. No per-endpoint code, so all 82 published operations are covered (83 with the exec WebSocket), including Cloud Agents (none of which
    the official CLI exposes).
 2. **An improved copy of that spec** (`spec/runta-openapi.yaml`): a one-time, documentation-only edit of a few
    operations on the core paths, plus `x-` extensions the CLI reads. It is the proposal to Runta. Every change
@@ -42,6 +42,10 @@ are worth in an eval.
 - **Destructive commands refuse to run without a terminal** unless `--yes` is given, and say what they would
   have sent. `--dry-run` prints any request without sending it.
 - **Input is checked against the spec** before anything is sent (`--resources.requests.vcpus 0` fails locally).
+  `--data '<json>'`, `--data @file` or `--data @-` (stdin) sends a whole body; flags override its fields.
+- **Mistyped commands get a suggestion**, by spelling, by common verbs (`upload` → `write`, `ls` → `list`, `rm` →
+  `delete`, and the official CLI's `ps`, `run`, `exec`), or by the flags that do the job (`runtimes ingress` →
+  `runtimes create --ingress-specs`).
 - `runta guide` explains Runta's purpose, the main workflows, conventions and every exit and error code;
   `runta <group> <command> --help` shows what each response status means; `runta schema ...` gives the JSON.
 
@@ -65,7 +69,7 @@ stub: the VM sees a placeholder and Runta injects the real key on egress.
 
 ## Utilities
 
-`guide`, `schema`, `api <METHOD> <path>` (any endpoint), `login`, `logout`, `doctor`, `activity` (the local log
+`guide`, `schema`, `spec` (where the bundled OpenAPI document is), `api <METHOD> <path>` (any endpoint), `login`, `logout`, `doctor`, `activity` (the local log
 of every call, with request IDs), `feedback "<message>"` (saves a bundle with recent activity; Runta has no
 feedback endpoint yet).
 
@@ -73,7 +77,7 @@ feedback endpoint yet).
 
 ```sh
 npm install
-npm test              # 24 tests against a fake API (HTTP + exec WebSocket)
+npm test              # 29 tests against a fake API (HTTP + exec WebSocket)
 npm run contract      # live, read-only: responses vs. the edited spec (needs RUNTA_TOKEN)
 npm run build:spec    # YAML -> the JSON the CLI loads
 ```

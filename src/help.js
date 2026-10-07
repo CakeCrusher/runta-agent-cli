@@ -64,6 +64,7 @@ function utilities() {
   return [
     ["guide", "What Runta is for, the main workflows, output and exit-code conventions"],
     ["schema <group> <command>", "Parameters, body and response schema of a command, as JSON"],
+    ["spec", "Where the bundled OpenAPI spec is (the full API description this CLI is generated from)"],
     ["api <METHOD> <path>", "Call any endpoint directly, e.g. runta api GET /v2/me"],
     ["login", "Sign in with a device code (--no-wait/--resume for agents) or store a key (--with-token)"],
     ["logout", "Forget the stored credential (--revoke also revokes it server-side)"],

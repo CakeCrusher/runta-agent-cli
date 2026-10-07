@@ -632,7 +632,8 @@ paths:
 
         It accrues cost until deleted (or paused/shut down/suspended). To hand a task to an agent, prefer
         `createCloudAgent`, which creates and manages its own runtime. Public ports (`ingress_specs`) are for
-        previews and agent tooling, not production hosting.
+        previews and agent tooling, not production hosting; each published port is reachable at
+        https://{runtime_port}-{runtime id}.runta.dev.
       x-wait:
         operationId: getRuntime
         parameters:
@@ -1690,10 +1691,10 @@ paths:
           style: simple
         - in: query
           name: path
-          description: Absolute path to a regular file inside the runtime.
+          description: Path to a regular file inside the runtime, either absolute or relative to the home directory (/root on agent images).
           required: true
           schema:
-            description: Absolute path to a regular file inside the runtime.
+            description: Path to a regular file inside the runtime, either absolute or relative to the home directory (/root on agent images).
             type: string
           style: form
       responses:
@@ -1782,10 +1783,10 @@ paths:
           style: simple
         - in: query
           name: path
-          description: Absolute path to a regular file inside the runtime.
+          description: Path to a regular file inside the runtime, either absolute or relative to the home directory (/root on agent images).
           required: true
           schema:
-            description: Absolute path to a regular file inside the runtime.
+            description: Path to a regular file inside the runtime, either absolute or relative to the home directory (/root on agent images).
             type: string
           style: form
       requestBody:
@@ -3849,6 +3850,9 @@ paths:
         The agent works inside its runtime, so files it writes stay there (the artifact list and the workspace
         API may not show them). Ask for what you need in the final message, or continue the same conversation
         with `followUpCloudAgentRun`.
+
+        Runs have no server-side time or spend limit, and the API reports no cost. To enforce a time limit, wait with a
+        timeout and cancel the run with `cancelCloudAgentRun` when it passes.
       x-wait:
         operationId: getCloudAgentRun
         parameters:
@@ -5256,6 +5260,9 @@ components:
         kind:
           $ref: '#/components/schemas/RuntimeWorkspaceOperationKind'
         path:
+          description: >-
+            Relative to the runtime's home directory (/root on agent images). Absolute paths, and paths that leave the
+            home directory, are rejected with 422.
           type: string
         query:
           type: string
@@ -5363,6 +5370,9 @@ components:
       type: object
       properties:
         path:
+          description: >-
+            Relative to the runtime's home directory (/root on agent images). Absolute paths, and paths that leave the
+            home directory, are rejected with 422.
           type: string
         content_base64:
           type: string
@@ -5387,6 +5397,9 @@ components:
       type: object
       properties:
         path:
+          description: >-
+            Relative to the runtime's home directory (/root on agent images). Absolute paths, and paths that leave the
+            home directory, are rejected with 422.
           type: string
         recursive:
           type: boolean
@@ -6944,7 +6957,7 @@ components:
           default:
             mode: disabled
         ingress_specs:
-          description: Optional ingress specs.
+          description: "Ports to publish, each reachable at https://{runtime_port}-{runtime id}.runta.dev (for example https://3000-0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b.runta.dev for port 3000, with the runtime `id` from the response). For previews and agent tooling, not production hosting."
           type: array
           default: []
           maxItems: 16
@@ -7031,7 +7044,7 @@ components:
           default:
             mode: disabled
         ingress_specs:
-          description: Optional ingress specs.
+          description: "Ports to publish, each reachable at https://{runtime_port}-{runtime id}.runta.dev (for example https://3000-0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b.runta.dev for port 3000, with the runtime `id` from the response). For previews and agent tooling, not production hosting."
           type: array
           default: []
           maxItems: 16
@@ -7089,6 +7102,12 @@ components:
           type: string
           minLength: 1
         model_provider_protocol:
+          description: >-
+            Protocol the image's agent uses to reach its model provider, one of the image's
+            `model_provider.protocol_bindings[].protocol` values from `listRuntimeImages` (for example `openai_responses`).
+            Required when the image binds a model provider. The provider credential travels in `secret_configuration`, as an
+            environment injection for the binding's `environment_variable` and an egress injection towards the provider
+            host. A request without it fails with 422, and the error names what is missing.
           type: string
           nullable: true
         runtime_sign_in:
@@ -7150,7 +7169,9 @@ components:
       type: object
       properties:
         name:
-          description: Secret display name.
+          description: >-
+            Secret display name; names Runta reserves for credentials it manages (observed for names starting with
+            `runta-`) are rejected with 403 permission_denied.
           type: string
           minLength: 1
         value:
@@ -7298,7 +7319,7 @@ components:
         - http
         - https
     PublicIngressSpec:
-      description: Public ingress forwarding rule.
+      description: "Public ingress forwarding rule. The port is reachable at https://{runtime_port}-{runtime id}.runta.dev; TLS is terminated by Runta."
       type: object
       properties:
         protocol:
@@ -7503,7 +7524,7 @@ components:
           description: RFC3339 timestamp of the last control-plane runtime row mutation.
           type: string
         ingress_specs:
-          description: Active ingress specs.
+          description: "Published ports. Each is reachable at https://{runtime_port}-{runtime id}.runta.dev."
           type: array
           items:
             $ref: '#/components/schemas/PublicIngressSpec'
@@ -7604,6 +7625,9 @@ components:
         name:
           type: string
         value_template:
+          description: >-
+            Must contain `${secret}` exactly once, for example `Bearer ${secret}` for an Authorization header or `${secret}`
+            for an environment variable; otherwise the request is rejected with 422.
           type: string
       required:
         - name
@@ -7623,6 +7647,9 @@ components:
         name:
           type: string
         value_template:
+          description: >-
+            Must contain `${secret}` exactly once, for example `Bearer ${secret}` for an Authorization header or `${secret}`
+            for an environment variable; otherwise the request is rejected with 422.
           type: string
       required:
         - host_pattern
@@ -7708,7 +7735,7 @@ components:
           allOf:
             - $ref: '#/components/schemas/PublicEgressPolicy'
         ingress_specs:
-          description: Complete replacement ingress configuration. Omit to leave unchanged.
+          description: "Complete replacement of the published ports; omit to leave unchanged. Each is reachable at https://{runtime_port}-{runtime id}.runta.dev."
           type: array
           items:
             $ref: '#/components/schemas/PublicIngressSpec'

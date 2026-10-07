@@ -14,14 +14,14 @@ import { commandHelp, groupHelp, guide, topHelp } from "./help.js";
 import { request, VERSION } from "./http.js";
 import { note, printJson } from "./output.js";
 import { fillDefaults, resolveNames } from "./resolve.js";
-import { buildCommands, closest, deref, findGroup, loadSpec } from "./spec.js";
+import { buildCommands, closest, deref, findGroup, loadSpec, OFFICIAL_VERBS, relatedCommands, suggestCommand } from "./spec.js";
 import { readEvents } from "./sse.js";
 import { checkForUpdate, INSTALL } from "./update.js";
 import { coerce, validateBody, validateParam } from "./validate.js";
 import { waitFor } from "./wait.js";
 import { runSession } from "./ws.js";
 
-const UTILITIES = ["guide", "schema", "api", "login", "logout", "doctor", "activity", "feedback", "help", "version"];
+const UTILITIES = ["guide", "schema", "spec", "api", "login", "logout", "doctor", "activity", "feedback", "help", "version"];
 const MiB = 1024 * 1024;
 
 export async function main(argv, env = process.env) {
@@ -65,8 +65,10 @@ async function dispatch({ argv, env, spec, groups, entry }) {
   if (!group) {
     // Someone used to `runta exec` or `runta ps` gets pointed at the generated equivalent.
     const same = [...groups.values()].flatMap((g) => [...g.commands.values()].filter((c) => c.name === first));
-    const hint = same.length ? same.map((c) => `runta ${c.group} ${c.name}`).join(" or ") : closest(first, [...groups.keys(), ...UTILITIES]);
-    throw usageError(`unknown command '${first}'${hint ? `; did you mean: ${hint}?` : ""}`, { hint: "runta --help" });
+    const hint = OFFICIAL_VERBS[first] ? `runta ${OFFICIAL_VERBS[first]}`
+      : same.length ? same.map((c) => `runta ${c.group} ${c.name}`).join(" or ") : closest(first, [...groups.keys(), ...UTILITIES]);
+    const related = hint ? [] : relatedCommands(spec, groups, first);
+    throw usageError(`unknown command '${first}'${hint ? `; did you mean: ${hint}?` : related.length ? `; related: ${related.join(", ")}` : ""}`, { hint: "runta --help" });
   }
   if (!second || second === "--help" || second === "-h") {
     process.stdout.write(groupHelp(group, groups) + "\n");
@@ -74,8 +76,7 @@ async function dispatch({ argv, env, spec, groups, entry }) {
   }
   const cmd = group.commands.get(second);
   if (!cmd) {
-    const hint = closest(second, [...group.commands.keys()]);
-    throw usageError(`unknown command '${group.name} ${second}'${hint ? `; did you mean '${group.name} ${hint}'?` : ""}`, { hint: `runta ${group.name} --help` });
+    throw unknownCommand(spec, groups, group, second);
   }
   Object.assign(entry, { command: `${cmd.group} ${cmd.name}`, operation_id: cmd.operationId });
   const args = parseArgs(spec, cmd, argv.slice(2));
@@ -173,6 +174,15 @@ async function dispatch({ argv, env, spec, groups, entry }) {
   return EXIT.timeout;
 }
 
+function unknownCommand(spec, groups, group, name) {
+  const hint = suggestCommand(group, name);
+  const related = hint ? [] : relatedCommands(spec, groups, name, { only: group });
+  const more = hint ? `; did you mean '${group.name} ${hint}'?`
+    : related.length ? `; related: ${related.join(", ")}`
+    : `; '${group.name}' has: ${[...group.commands.keys()].join(", ")}`;
+  return usageError(`unknown command '${group.name} ${name}'${more}`, { hint: `runta ${group.name} --help` });
+}
+
 function makeClient({ spec, groups, env, flag, needAuth }) {
   const endpoint = flag("endpoint") || env.RUNTA_ENDPOINT || spec.servers?.[0]?.url || "https://api.runta.com";
   const cred = resolveToken(flag("token"), env);
@@ -184,7 +194,14 @@ function makeClient({ spec, groups, env, flag, needAuth }) {
 
 function readData(data, contentType) {
   if (data === undefined) return undefined;
-  const raw = data === "-" ? readFileSync(0) : String(data).startsWith("@") ? readFileSync(String(data).slice(1)) : Buffer.from(String(data));
+  // `-` and `@-` read stdin (curl's convention); `@path` reads a file.
+  const src = String(data);
+  let raw;
+  try {
+    raw = src === "-" || src === "@-" ? readFileSync(0) : src.startsWith("@") ? readFileSync(src.slice(1)) : Buffer.from(src);
+  } catch (e) {
+    throw usageError(`cannot read --data ${src}: ${e.code || e.message}`);
+  }
   if (contentType !== "application/json") return raw;
   try {
     return JSON.parse(raw.toString("utf8"));
@@ -260,11 +277,22 @@ async function utility(name, rest, { env, spec, groups, entry }) {
       process.stdout.write(guide(spec, groups) + "\n");
       return EXIT.ok;
     case "schema": {
-      const g = findGroup(groups, opts.positionals[0] || "");
-      const cmd = g?.commands.get(opts.positionals[1] || "");
-      if (!cmd) throw usageError("usage: runta schema <group> <command>");
+      const [gName, cName] = opts.positionals;
+      const g = findGroup(groups, gName || "");
+      if (!g) {
+        const hint = gName && closest(gName, [...groups.keys()]);
+        throw usageError(`usage: runta schema <group> <command>${gName ? `; no group '${gName}'${hint ? `, did you mean '${hint}'?` : ""}` : ""}`, { hint: "runta --help" });
+      }
+      const cmd = g.commands.get(cName || "");
+      if (!cmd) throw cName ? unknownCommand(spec, groups, g, cName) : usageError(`usage: runta schema ${g.name} <command>`, { hint: `runta ${g.name} --help` });
       const op = spec.paths[cmd.path][cmd.method.toLowerCase()];
       printJson(deref(spec, { operationId: cmd.operationId, method: cmd.method, path: cmd.path, summary: op.summary, description: op.description, parameters: cmd.params, requestBody: op.requestBody, responses: op.responses, "x-wait": op["x-wait"], destructive: cmd.destructive }), out);
+      return EXIT.ok;
+    }
+    case "spec": {
+      // Agents look for the API's OpenAPI document; the CLI ships it, so say where it is.
+      const ops = Object.values(spec.paths || {}).reduce((n, item) => n + Object.keys(item).filter((m) => ["get", "post", "put", "patch", "delete", "head"].includes(m)).length, 0);
+      printJson({ path: spec["x-loaded-from"], title: spec.info?.title, version: spec.info?.version, operations: ops, note: "OpenAPI 3.0 JSON; `runta schema <group> <command>` shows one operation" }, out);
       return EXIT.ok;
     }
     case "api": {
