@@ -106,7 +106,8 @@ export function buildCommands(spec) {
         websocket: op["x-websocket"] || null,
         wait: op["x-wait"] || null,
         destructive: op["x-destructive"] ?? method === "delete",
-        noAuth: Array.isArray(op.security) && op.security.length === 0,
+        // No security requirement (or an empty one) means the operation needs no credential.
+        noAuth: (op.security ?? spec.security ?? []).length === 0 || (op.security ?? spec.security).some((r) => Object.keys(r).length === 0),
       });
     }
   }

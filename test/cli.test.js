@@ -145,3 +145,16 @@ test("login --with-token verifies the key and stores it for later commands", asy
   const stored = JSON.parse(readFileSync(join(r.home, "config", "runta-agent-cli", "credentials.json"), "utf8"));
   assert.equal(stored.token, "test-key");
 });
+
+test("operations without a security requirement need no credential", async () => {
+  const healthApi = await fakeApi({ "GET /healthz": (req, res) => { res.writeHead(200); res.end(); } });
+  const r = await runCli(["health", "healthz"], { endpoint: healthApi.url, env: { RUNTA_TOKEN: "" } });
+  await healthApi.close();
+  assert.equal(r.code, 0, r.stdout);
+});
+
+test("exec --max-output prints up to the limit, then says it stopped", async () => {
+  const r = await run(["runtimes", "exec", RT_ID, "--max-output", "4", "--", "echo", "hello"]);
+  assert.equal(r.stdout, "echo");
+  assert.match(r.stderr, /output truncated after 4 bytes/);
+});

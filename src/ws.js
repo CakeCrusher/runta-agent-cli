@@ -94,13 +94,14 @@ function once({ url, token, session, argv, options, stdin, timeoutSeconds, maxOu
       for (const [stream, spec] of Object.entries(session.output || {})) {
         if (type !== spec.type) continue;
         const bytes = Buffer.from(msg[spec.field] || "", spec.encoding === "base64" ? "base64" : "utf8");
-        if (maxOutput && written + bytes.length > maxOutput) {
-          if (!truncated) err.write(`\n[runta] output truncated after ${maxOutput} bytes (use --max-output 0 for all of it)\n`);
+        if (truncated) return;
+        const room = maxOutput ? maxOutput - written : bytes.length;
+        (stream === "stderr" ? err : out).write(room >= bytes.length ? bytes : bytes.subarray(0, Math.max(room, 0)));
+        written += Math.min(bytes.length, Math.max(room, 0));
+        if (maxOutput && room < bytes.length) {
           truncated = true;
-          return;
+          err.write(`\n[runta] output truncated after ${maxOutput} bytes (use --max-output 0 for all of it)\n`);
         }
-        written += bytes.length;
-        (stream === "stderr" ? err : out).write(bytes);
         return;
       }
       if (type === session.exit.type) done({ kind: "exit", code: msg[session.exit.field], truncated });
