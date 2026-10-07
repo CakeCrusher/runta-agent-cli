@@ -43,6 +43,10 @@ are worth in an eval.
   have sent. `--dry-run` prints any request without sending it.
 - **Input is checked against the spec** before anything is sent (`--resources.requests.vcpus 0` fails locally).
   `--data '<json>'`, `--data @file` or `--data @-` (stdin) sends a whole body; flags override its fields.
+- **Help is complete, so the spec is never needed**: `runta <group> <command> --help` shows every flag's full
+  description and the fields inside nested bodies. Body fields are `--kebab-case` flags; a field inside one takes a
+  dot and its exact JSON name (`--image.model_provider_protocol openai_responses`); a list of objects is given as
+  JSON. A wrong nested name is refused with the exact one, before anything is sent.
 - **Mistyped commands get a suggestion**, by spelling, by common verbs (`upload` → `write`, `ls` → `list`, `rm` →
   `delete`, and the official CLI's `ps`, `run`, `exec`), or by the flags that do the job (`runtimes ingress` →
   `runtimes create --ingress-specs`).
@@ -69,7 +73,7 @@ stub: the VM sees a placeholder and Runta injects the real key on egress.
 
 ## Utilities
 
-`guide`, `schema`, `spec` (where the bundled OpenAPI document is), `api <METHOD> <path>` (any endpoint), `login`, `logout`, `doctor`, `activity` (the local log
+`guide`, `schema` (a command's help as JSON), `api <METHOD> <path>` (any endpoint), `login`, `logout`, `doctor`, `activity` (the local log
 of every call, with request IDs), `feedback "<message>"` (saves a bundle with recent activity; Runta has no
 feedback endpoint yet).
 
@@ -77,7 +81,7 @@ feedback endpoint yet).
 
 ```sh
 npm install
-npm test              # 29 tests against a fake API (HTTP + exec WebSocket)
+npm test              # 32 tests against a fake API (HTTP + exec WebSocket)
 npm run contract      # live, read-only: responses vs. the edited spec (needs RUNTA_TOKEN)
 npm run build:spec    # YAML -> the JSON the CLI loads
 ```

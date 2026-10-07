@@ -44,8 +44,35 @@ to be true and incomplete, and both changed what agents did:
 - "The API reports no cost" is incomplete: `listCloudAgentSessionEvents` reports token usage per model message; only
   its `cost` fields read 0. An agent asked to report a run's cost answered "unavailable".
 
-Also found: every process an exec session starts is killed when the session ends (`nohup`, `setsid` and `&` included),
-so a server has to run as a systemd unit. The spec only says a disconnect kills the command.
+Also found: a dev server started from an exec session with `nohup … & disown` died when the session ended; the spec
+only said a disconnect kills the command. (This note first said `setsid` dies too; a test on 2026-10-07 showed it
+survives.) All three are addressed in 0.1.3.
+
+## 0.1.3: what Round 2 showed
+
+Round 2 (0.1.2) passed 15 of 20 scored tasks (T9 isn't scored: no agent can meet its spend cap through Runta's API).
+Each change comes from a Round 2 failure or a gap it exposed, worded for any task.
+
+| Change | Why (evidence) |
+|---|---|
+| Overview, `SecretEnvironmentInjection`, `SecretEgressInjection`: an environment injection puts the secret's value inside the VM, where every process can read it; an egress injection adds it at Runta's gateway and it never enters the VM. To keep a credential out, use egress injections only, and fill a variable an image requires from a placeholder secret | T6, Astra: followed 0.1.2's text, found the real key in the VM's environment, and stopped. Verified with a dummy secret (`CHECK_ENV=dummy-envcheck-value-0001` inside the VM) |
+| `model_provider_protocol`: the same consequence, and the placeholder pattern for agent images | Same trial |
+| `createCloudAgentRun`: usage is reported in tokens (`usage.input`, `usage.output`, `usage.totalTokens` on each model message in `listCloudAgentSessionEvents`); the `cost` fields read 0, so estimate spend from tokens | T9, Luna: answered "cost unavailable" after 0.1.2 said "the API reports no cost" |
+| `execRuntime`: the processes a session started end with it, including `&` and `nohup`; only a process in its own session (`setsid`) or a systemd unit keeps running; start servers with `systemd-run` | T7, Luna: started the dev server with `nohup … & disown`, and it died with the session (preview 503). Tested on the clean image: `nohup`, `&` and a backgrounded subshell were killed; `setsid` and a `systemd-run` unit survived |
+
+CLI (generic runtime):
+
+- **Help carries everything; `runta spec` is gone.** Command help shows each flag's full description (0.1.2 showed
+  only the first sentence) and lists the fields inside nested request bodies: an object's fields as `--parent.child`
+  with the exact JSON name after the dot, a list's item fields as JSON paths, `oneOf` variants one by one. `runta
+  spec` pointed agents at the raw spec file (3 Round 2 trials ran it, then searched the file); `runta schema` stays
+  as the JSON form of command help.
+- **Exact names.** A misspelled nested field is refused before anything is sent, naming the exact one
+  (`--image.model-provider-protocol` → "did you mean 'model_provider_protocol'?").
+- Fixed while doing this: a dotted flag's first part now maps to its body field (`--egress-policy.mode` used to send
+  a field literally named `egress-policy`); a plain value for a nested list adds one item, like top-level flags;
+  suggestions ignore `-`/`_` and no longer match short names by containment ("id" is inside "provider").
+- `update` → `patch` in command suggestions (`runtimes update` in Round 2).
 
 ## Extensions the CLI reads
 

@@ -54,17 +54,65 @@ export function typeLabel(schema) {
   const s = flat(schema);
   if (s.enum) return s.enum.length <= 9 ? s.enum.join("|") : `${s.type || "string"} (${s.enum.length} values)`;
   if (s.type === "array") return `${typeLabel(s.items || {})}[]`;
-  if (s.oneOf || s.anyOf) return "object (see schema)";
+  if (s.oneOf || s.anyOf) return "object (one of)";
   return s.type || "object";
 }
 
-const firstSentence = (t = "") => (t.split(/(?<=\.)\s/)[0] || "").replace(/\s+/g, " ").trim();
+const oneLine = (t = "") => reflow(t).replace(/\s+/g, " ").trim();
+
+// A flag (or argument) row: the full description wrapped under a fixed column, never cut short.
+function rows(flag, desc, col = 36, width = 112) {
+  const chunks = [];
+  let cur = "";
+  for (const w of (desc || "").split(/\s+/).filter(Boolean)) {
+    if (cur && cur.length + 1 + w.length > width - col) {
+      chunks.push(cur);
+      cur = w;
+    } else cur = cur ? `${cur} ${w}` : w;
+  }
+  if (cur) chunks.push(cur);
+  const head = `  ${flag}`;
+  const pad = " ".repeat(col);
+  if (!chunks.length) return [head];
+  if (head.length + 2 > col) return [head, ...chunks.map((c) => pad + c)];
+  return [head.padEnd(col) + chunks[0], ...chunks.slice(1).map((c) => pad + c)];
+}
+
+const objectish = (s) => !!(s && (s.properties || s.oneOf || s.anyOf));
+
+// Fields inside a body field, so an agent never has to open the spec. Fields of an object are set with a dot and
+// their exact JSON name (--image.model_provider_protocol); the fields of a list's items are given as JSON.
+function nestedRows(schema, path, depth, groups, out, asFlag) {
+  const s = flat(schema);
+  if (!s || depth > 5) return;
+  const variants = [...(s.oneOf || []), ...(s.anyOf || [])].map(flat).filter((v) => v.properties);
+  if (variants.length) {
+    for (const v of variants) {
+      const tag = Object.entries(v.properties).map(([k, p]) => [k, flat(p)]).find(([, p]) => p.enum?.length === 1 || p.const !== undefined);
+      const label = tag ? `${tag[0]} = ${tag[1].const ?? tag[1].enum[0]}` : v.title || "variant";
+      out.push([`${"  ".repeat(depth)}when ${label}:`, oneLine(renderText(v.description || "", groups))]);
+      fieldRows(v, path, depth + 1, groups, out, asFlag);
+    }
+    return;
+  }
+  fieldRows(s, path, depth, groups, out, asFlag);
+}
+
+function fieldRows(s, path, depth, groups, out, asFlag) {
+  const req = new Set(s.required || []);
+  for (const [k, raw] of Object.entries(s.properties || {})) {
+    const fs = flat(raw);
+    const desc = fs.description || (fs.type === "array" ? flat(fs.items).description : "") || "";
+    out.push([`${"  ".repeat(depth)}${asFlag ? "--" : ""}${path}.${k} ${typeLabel(fs)}`, `${req.has(k) ? "(required) " : ""}${oneLine(renderText(desc, groups))}`]);
+    if (fs.type === "array" && objectish(flat(fs.items))) nestedRows(fs.items, `${path}.${k}[]`, depth + 1, groups, out, false);
+    else if (objectish(fs)) nestedRows(fs, `${path}.${k}`, depth + 1, groups, out, asFlag);
+  }
+}
 
 function utilities() {
   return [
     ["guide", "What Runta is for, the main workflows, output and exit-code conventions"],
     ["schema <group> <command>", "Parameters, body and response schema of a command, as JSON"],
-    ["spec", "Where the bundled OpenAPI spec is (the full API description this CLI is generated from)"],
     ["api <METHOD> <path>", "Call any endpoint directly, e.g. runta api GET /v2/me"],
     ["login", "Sign in with a device code (--no-wait/--resume for agents) or store a key (--with-token)"],
     ["logout", "Forget the stored credential (--revoke also revokes it server-side)"],
@@ -133,22 +181,30 @@ export function commandHelp(spec, cmd, groups) {
     for (const p of pathParams) {
       const lk = lookups[p.name];
       const byName = lk ? ` A ${lk.match.join("/")} also works (looked up with ${renderText("`" + lk.operationId + "`", groups)}).` : "";
-      lines.push(`  ${("<" + p.name + ">").padEnd(28)}${firstSentence(renderText(p.description || p.schema?.description || "", groups))}${byName}`);
+      lines.push(...rows(`<${p.name}>`, `${oneLine(renderText(p.description || p.schema?.description || "", groups))}${byName}`, 30));
     }
   }
   const flags = [];
   for (const p of cmd.params.filter((x) => x.in !== "path")) {
     const auto = p["x-default-from"] ? " Filled in automatically when omitted." : "";
-    flags.push([`--${kebab(p.name)} ${typeLabel(p.schema || {})}`, `${p.required && !p["x-default-from"] ? "(required) " : ""}${firstSentence(renderText(p.description || "", groups))}${auto}`]);
+    flags.push([`--${kebab(p.name)} ${typeLabel(p.schema || {})}`, `${p.required && !p["x-default-from"] ? "(required) " : ""}${oneLine(renderText(p.description || "", groups))}${auto}`]);
   }
+  let naming = null;
   if (cmd.body?.contentType === "application/json") {
     const { props, required } = bodyFields(spec, cmd.body.schema);
     for (const [n, s] of Object.entries(props)) {
       const fs = flat(s);
-      flags.push([`--${kebab(n)} ${typeLabel(fs)}`, `${required.has(n) ? "(required) " : ""}${firstSentence(renderText(fs.description || "", groups))}`]);
+      const desc = fs.description || (fs.type === "array" ? flat(fs.items).description : "") || "";
+      flags.push([`--${kebab(n)} ${typeLabel(fs)}`, `${required.has(n) ? "(required) " : ""}${oneLine(renderText(desc, groups))}`]);
       if (fs["x-enum-descriptions"]) for (const [v, d] of Object.entries(fs["x-enum-descriptions"])) flags.push([`    ${v}`, renderText(d, groups)]);
+      const inner = [];
+      if (fs.type === "array" && objectish(flat(fs.items))) nestedRows(fs.items, `${n}[]`, 2, groups, inner, false);
+      else if (objectish(fs)) nestedRows(fs, kebab(n), 2, groups, inner, true);
+      flags.push(...inner);
+      const leaf = !naming && fs.properties && Object.entries(fs.properties).find(([, v]) => !objectish(flat(v)) && flat(v).type !== "array");
+      if (leaf) naming = `--${kebab(n)}.${leaf[0]}`;
     }
-    flags.push(["--data <json|@file|->", "Whole body as JSON; flags override its fields. Nested fields: --a.b value"]);
+    flags.push(["--data <json|@file|->", "Whole body as JSON; flags override its fields"]);
   } else if (cmd.body) {
     flags.push(["--data <@file|->", `Request body (${cmd.body.contentType})`]);
   }
@@ -167,7 +223,9 @@ export function commandHelp(spec, cmd, groups) {
   if (cmd.method !== "GET") flags.push(["--dry-run", "Print the request instead of sending it"]);
   if (flags.length) {
     lines.push("", "Flags:");
-    for (const [f, d] of flags) lines.push(`  ${f.padEnd(34)}${d}`);
+    if (cmd.body?.contentType === "application/json")
+      lines.push(...wrap(`Body fields are --kebab-case flags. A field inside one is set with a dot and its exact JSON name${naming ? ` (${naming} <value>)` : ""}; a list of objects is given as JSON, or in --data.`, 2, 112).split("\n"));
+    for (const [f, d] of flags) lines.push(...rows(f, d));
   }
   const meanings = responseMeanings(spec, cmd);
   for (const [path, values] of meanings) {

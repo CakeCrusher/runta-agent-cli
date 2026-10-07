@@ -110,7 +110,11 @@ export function parseArgs(spec, cmd, argv) {
     }
     if (dotted) {
       if (entry.kind !== "body") throw usageError(`--${key}: only body fields take dotted sub-fields`);
-      nested.push([key.split(".").map((p) => p), raw, entry]);
+      // The first part names the body field like any flag (kebab or JSON spelling); the parts after the dot must be
+      // the exact JSON names, checked against the schema before anything is sent.
+      const parts = [entry.name, ...key.split(".").slice(1)];
+      checkNestedPath(entry.schema, parts, key, cmd);
+      nested.push([parts, raw, entry]);
       continue;
     }
     values.set(entry.name, accumulate(values.get(entry.name), raw, entry.schema));
@@ -137,6 +141,24 @@ function accumulate(prev, raw, rawSchema = {}) {
     return { ...(prev || {}), [raw.slice(0, eq)]: raw.slice(eq + 1) };
   }
   return coerce(raw, schema);
+}
+
+// A field inside a body field is named exactly as in the API's JSON; a wrong name is an input error that says the right one.
+function checkNestedPath(schema, parts, key, cmd) {
+  let s = flat(schema);
+  for (let i = 1; i < parts.length; i++) {
+    const where = parts.slice(0, i).join(".");
+    if (s.type === "array") throw usageError(`--${key}: ${where} is a list; give it as JSON or in --data`, { hint: `runta ${cmd.group} ${cmd.name} --help` });
+    const branches = [s, ...(s.allOf || []), ...(s.oneOf || []), ...(s.anyOf || [])].map(flat);
+    const names = [...new Set(branches.flatMap((b) => Object.keys(b.properties || {})))];
+    if (!names.length && s.additionalProperties) return; // a free-form map: any key is valid
+    const next = branches.map((b) => b.properties?.[parts[i]]).find(Boolean);
+    if (!next) {
+      const hint = closest(parts[i], names);
+      throw usageError(`--${key}: ${where} has no field '${parts[i]}'${hint ? `; did you mean '${hint}'?` : ""} (fields inside a body field use their exact JSON names: ${names.join(", ")})`, { hint: `runta ${cmd.group} ${cmd.name} --help` });
+    }
+    s = flat(next);
+  }
 }
 
 export function setNested(target, parts, value) {

@@ -157,9 +157,13 @@ export function closest(name, candidates) {
         d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
     return d[a.length][b.length];
   };
+  // Separators don't count (model-provider-protocol vs model_provider_protocol), and containment only counts for
+  // names long enough not to match by accident ("id" is inside "provider").
+  const norm = (s) => s.toLowerCase().replace(/[-_\s]/g, "");
   let best = null;
   for (const c of candidates) {
-    const score = c.includes(name) || name.includes(c) ? 0 : dist(name, c);
+    const a = norm(name), b = norm(c);
+    const score = a === b ? -1 : Math.min(a.length, b.length) >= 4 && (b.includes(a) || a.includes(b)) ? 0 : dist(a, b);
     if (score <= Math.max(2, Math.floor(name.length / 3)) && (!best || score < best.score)) best = { c, score };
   }
   return best?.c || null;
@@ -169,7 +173,7 @@ export function closest(name, candidates) {
 const SYNONYMS = {
   upload: "write", put: "write", download: "read", cat: "read", ls: "list", ps: "list", rm: "delete", remove: "delete",
   del: "delete", inspect: "get", show: "get", describe: "get", info: "get", new: "create", add: "create", run: "create",
-  kill: "stop", halt: "stop",
+  kill: "stop", halt: "stop", update: "patch",
 };
 
 export function suggestCommand(group, name) {

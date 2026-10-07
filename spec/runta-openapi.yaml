@@ -12,8 +12,11 @@ info:
     - Run commands in an isolated environment you control: `createRuntime`, `execRuntime`, `deleteRuntime`.
     - Prepare a golden environment once and start many identical copies: `createCheckpoint`, then
       `createRuntime` with `checkpoint_id` for each copy.
-    - Give agents credentials safely: `createSecret` plus `secret_configuration` injects them on egress (the VM
-      only sees a placeholder), and `egress_policy` restricts where the VM can connect.
+    - Give agents credentials safely: `createSecret`, then `secret_configuration`. An egress injection adds the
+      secret to matching outbound requests at Runta's gateway, so the value never enters the VM; an environment
+      injection puts the value inside the VM, where every process can read it. To keep a credential out of the VM,
+      use only egress injections (if an image requires the environment variable, fill it from a placeholder secret).
+      `egress_policy` restricts where the VM can connect.
 
     **Runta is not** a production web host or deployment platform. Public ports (`ingress_specs`) exist for
     previews and agent tooling: runtimes can be paused, suspended or deleted, and there is no deployment
@@ -1331,7 +1334,7 @@ paths:
         \ packages, checking process state. It is synchronous,\ncheap (the first output arrives in about 1 s) and\
         \ deterministic. **Delegate to a Cloud Agent\n(`POST /v2/agents`) instead** when the work is open-ended, takes\
         \ many steps, or must keep running\nafter you disconnect. An exec session is tied to the WebSocket: **if the\
-        \ connection drops for\nany reason, the command is killed**, and you cannot reattach.\n\nProtocol:\n  1. Send\
+        \ connection drops for\nany reason, the command is killed**, and you cannot reattach. When the session ends, the processes it started end with it, including ones put in the background with `&` or `nohup`; only a process in its own session (`setsid`) or a systemd unit keeps running. To keep a server running after the command returns, start it as a unit, for example `systemd-run --unit=web --working-directory=/root/app npm run dev`.\n\nProtocol:\n  1. Send\
         \ a `start` message first. It must be the first frame.\n  2. Optionally send `stdin` chunks, then `close_stdin`.\
         \ Send `close_stdin` immediately if\n     the command reads no input; otherwise commands such as `cat` wait\
         \ forever.\n  3. Read `stdout`/`stderr` frames until an `exit` frame (success: the command ran, check `code`)\n\
@@ -3851,8 +3854,10 @@ paths:
         API may not show them). Ask for what you need in the final message, or continue the same conversation
         with `followUpCloudAgentRun`.
 
-        Runs have no server-side time or spend limit, and the API reports no cost. To enforce a time limit, wait with a
-        timeout and cancel the run with `cancelCloudAgentRun` when it passes.
+        Runs have no server-side time or spend limit. To enforce a time limit, wait with a timeout and cancel the run
+        with `cancelCloudAgentRun` when it passes. Usage is reported in tokens, not dollars: each model message in the
+        run's session events (`listCloudAgentSessionEvents`) carries `usage.input`, `usage.output` and
+        `usage.totalTokens`, while its `cost` fields read 0. Estimate spend from the tokens and the model's prices.
       x-wait:
         operationId: getCloudAgentRun
         parameters:
@@ -7107,7 +7112,9 @@ components:
             `model_provider.protocol_bindings[].protocol` values from `listRuntimeImages` (for example `openai_responses`).
             Required when the image binds a model provider. The provider credential travels in `secret_configuration`, as an
             environment injection for the binding's `environment_variable` and an egress injection towards the provider
-            host. A request without it fails with 422, and the error names what is missing.
+            host. A request without it fails with 422, and the error names what is missing. The environment injection
+            puts its secret's value inside the runtime: to keep the real key out, fill the environment variable from a
+            placeholder secret and give the real key only to the egress injection.
           type: string
           nullable: true
         runtime_sign_in:
@@ -7619,7 +7626,10 @@ components:
         - header
         - query
     SecretEnvironmentInjection:
-      description: Environment variable populated from a secret.
+      description: >-
+        Environment variable set to the secret's value inside the runtime, where the agent and every process can read
+        it. For a credential the runtime must not see, use a SecretEgressInjection instead; if an image requires the
+        variable, fill it from a placeholder secret.
       type: object
       properties:
         name:
@@ -7634,7 +7644,9 @@ components:
         - value_template
       additionalProperties: false
     SecretEgressInjection:
-      description: HTTP egress credential populated from a secret.
+      description: >-
+        HTTP credential added to matching outbound requests at Runta's egress gateway; the secret's value never
+        enters the runtime.
       type: object
       properties:
         host_pattern:

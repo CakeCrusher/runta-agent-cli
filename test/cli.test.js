@@ -179,14 +179,34 @@ test("unknown commands suggest by common verb synonyms and by related flags", as
   assert.match((await run(["runtimes", "ingress"])).json().error.message, /--ingress-specs/);
 });
 
-test("schema suggests a valid command on a typo; spec says where the bundled document is", async () => {
+test("schema suggests a valid command on a typo; there is no spec command (help carries everything)", async () => {
   const s = await run(["schema", "runtimes", "lst"]);
   assert.equal(s.code, 2);
   assert.match(s.stdout + s.stderr, /runtimes list/);
-  const spec = await run(["spec"]);
-  assert.equal(spec.code, 0);
-  const out = spec.json();
-  const doc = JSON.parse(readFileSync(out.path, "utf8"));
-  const ops = Object.values(doc.paths).flatMap((p) => Object.values(p)).filter((o) => o && o.operationId);
-  assert.equal(out.operations, ops.length);
+  assert.equal((await run(["spec"])).code, 2);
+});
+
+test("command help shows full descriptions and every nested field under its exact name", async () => {
+  const h = (await run(["runtimes", "create", "--help"])).stdout;
+  assert.match(h, /--image\.model_provider_protocol string/);
+  assert.match(h, /placeholder secret/); // a later sentence of a description, not just the first
+  assert.match(h, /secret_configuration\[\]\.environment\[\]\.value_template string/);
+  assert.match(h, /when mode = allowlist:/);
+  assert.match(h, /exact JSON name/);
+});
+
+test("a misspelled nested field is refused with its exact name, and nothing is sent", async () => {
+  const before = api.calls.length;
+  const r = await run(["runtimes", "create", "--name", "x", "--image.model-provider-protocol", "openai_responses"]);
+  assert.equal(r.code, 2);
+  assert.match(r.json().error.message, /did you mean 'model_provider_protocol'/);
+  assert.equal(api.calls.length, before);
+});
+
+test("nested flags: the body field may be kebab-case, list values accumulate, update suggests patch", async () => {
+  const d = await run(["runtimes", "create", "--name", "x", "--egress-policy.mode", "allowlist",
+    "--egress-policy.allowed_hosts", "a.example", "--egress-policy.allowed_hosts", "b.example", "--dry-run"]);
+  assert.equal(d.code, 0);
+  assert.deepEqual(d.json().body.egress_policy, { mode: "allowlist", allowed_hosts: ["a.example", "b.example"] });
+  assert.match((await run(["runtimes", "update"])).json().error.message, /runtimes patch/);
 });

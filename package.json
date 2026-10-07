@@ -1,6 +1,6 @@
 {
   "name": "runta-agent-cli",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Agent-native CLI for the Runta API, generated at runtime from the OpenAPI spec (unofficial).",
   "type": "module",
   "bin": {

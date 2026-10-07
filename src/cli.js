@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { logActivity, readActivity, redactArgv } from "./activity.js";
-import { parseArgs, schemaAt, setNested } from "./args.js";
+import { flat, parseArgs, schemaAt, setNested } from "./args.js";
 import { deviceName, forgetToken, resolveToken, saveToken } from "./auth.js";
 import { Client } from "./client.js";
 import { detectAgent, ensureDir, isInteractive, stateDir } from "./env.js";
@@ -21,7 +21,7 @@ import { coerce, validateBody, validateParam } from "./validate.js";
 import { waitFor } from "./wait.js";
 import { runSession } from "./ws.js";
 
-const UTILITIES = ["guide", "schema", "spec", "api", "login", "logout", "doctor", "activity", "feedback", "help", "version"];
+const UTILITIES = ["guide", "schema", "api", "login", "logout", "doctor", "activity", "feedback", "help", "version"];
 const MiB = 1024 * 1024;
 
 export async function main(argv, env = process.env) {
@@ -115,7 +115,14 @@ async function dispatch({ argv, env, spec, groups, entry }) {
         if (entryDef.kind === "body" && args.values.has(entryDef.name)) (body ||= {})[entryDef.name] = args.values.get(entryDef.name);
       }
       const full = deref(spec, cmd.body.schema || {});
-      for (const [parts, raw] of args.nested) setNested((body ||= {}), parts, coerce(raw, schemaAt(full, parts)));
+      for (const [parts, raw] of args.nested) {
+        // Like top-level flags: a plain value for a list field adds one item (repeat the flag for more); JSON sets it whole.
+        const at = flat(schemaAt(full, parts));
+        if (at.type === "array" && !/^\s*\[/.test(raw)) {
+          const prev = parts.reduce((node, p) => (node && typeof node === "object" ? node[p] : undefined), body);
+          setNested((body ||= {}), parts, [...(Array.isArray(prev) ? prev : []), coerce(raw, flat(at.items || {}))]);
+        } else setNested((body ||= {}), parts, coerce(raw, at));
+      }
       if (body === undefined && cmd.body.required) body = {};
       problems.push(...validateBody(spec, cmd.body.schema, body));
     }
@@ -287,12 +294,6 @@ async function utility(name, rest, { env, spec, groups, entry }) {
       if (!cmd) throw cName ? unknownCommand(spec, groups, g, cName) : usageError(`usage: runta schema ${g.name} <command>`, { hint: `runta ${g.name} --help` });
       const op = spec.paths[cmd.path][cmd.method.toLowerCase()];
       printJson(deref(spec, { operationId: cmd.operationId, method: cmd.method, path: cmd.path, summary: op.summary, description: op.description, parameters: cmd.params, requestBody: op.requestBody, responses: op.responses, "x-wait": op["x-wait"], destructive: cmd.destructive }), out);
-      return EXIT.ok;
-    }
-    case "spec": {
-      // Agents look for the API's OpenAPI document; the CLI ships it, so say where it is.
-      const ops = Object.values(spec.paths || {}).reduce((n, item) => n + Object.keys(item).filter((m) => ["get", "post", "put", "patch", "delete", "head"].includes(m)).length, 0);
-      printJson({ path: spec["x-loaded-from"], title: spec.info?.title, version: spec.info?.version, operations: ops, note: "OpenAPI 3.0 JSON; `runta schema <group> <command>` shows one operation" }, out);
       return EXIT.ok;
     }
     case "api": {
