@@ -1,0 +1,35 @@
+{
+  "name": "runta-agent-cli",
+  "version": "0.1.0",
+  "description": "Agent-native CLI for the Runta API, generated at runtime from the OpenAPI spec (unofficial).",
+  "type": "module",
+  "bin": {
+    "runta": "bin/runta.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "spec/*.json",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "build:spec": "node scripts/build-spec.mjs",
+    "test": "node --test test/*.test.js",
+    "contract": "node scripts/contract-test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CakeCrusher/runta-agent-cli.git"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "yaml": "^2.6.0"
+  }
+}
