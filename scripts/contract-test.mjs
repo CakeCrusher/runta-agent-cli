@@ -3,9 +3,9 @@
 // (edited) spec. If Runta returns something our spec does not allow, this fails, which keeps the
 // edited spec honest. Needs RUNTA_TOKEN (or a stored login). Usage: npm run contract
 import Ajv from "ajv";
-import { resolveToken } from "../src/auth.js";
-import { Client } from "../src/client.js";
-import { buildCommands, loadSpec } from "../src/spec.js";
+import { resolveToken } from "../dist/auth.js";
+import { Client } from "../dist/client.js";
+import { buildCommands, loadSpec } from "../dist/spec.js";
 
 const spec = loadSpec();
 const groups = buildCommands(spec);

@@ -12,7 +12,7 @@ export const EXIT = {
   failedState: 9, // --wait saw the resource end in a failed state (e.g. run failed)
 };
 
-export function exitForStatus(status) {
+export function exitForStatus(status: number): number {
   if (status >= 200 && status < 400) return EXIT.ok;
   if (status === 400 || status === 422) return EXIT.usage;
   if (status === 401 || status === 403) return EXIT.auth;
@@ -24,7 +24,11 @@ export function exitForStatus(status) {
 
 // Errors raised by the CLI itself use the API's own error shape, so callers parse one format.
 export class CliError extends Error {
-  constructor(code, message, exitCode, extra = {}) {
+  declare code: string;
+  declare exitCode: number;
+  declare extra: Record<string, unknown>;
+
+  constructor(code: string, message: string, exitCode: number, extra: Record<string, unknown> = {}) {
     super(message);
     this.code = code;
     this.exitCode = exitCode;
@@ -35,4 +39,4 @@ export class CliError extends Error {
   }
 }
 
-export const usageError = (message, extra) => new CliError("invalid_argument", message, EXIT.usage, extra);
+export const usageError = (message: string, extra?: Record<string, unknown>) => new CliError("invalid_argument", message, EXIT.usage, extra);

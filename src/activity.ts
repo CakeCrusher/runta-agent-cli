@@ -38,7 +38,7 @@ export function readActivity(limit = 20, env = process.env) {
 const SENSITIVE = /token|secret|password|value|key|data|env|prompt/i;
 
 export function redactArgv(argv) {
-  const out = [];
+  const out: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--") {

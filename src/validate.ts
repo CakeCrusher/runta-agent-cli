@@ -6,7 +6,8 @@ const cache = new WeakMap();
 function ajvFor(spec) {
   if (!cache.has(spec)) {
     // OpenAPI 3.0 schemas: `nullable` is understood by Ajv; formats like uint64 are documentation only.
-    const ajv = new Ajv({ strict: false, allErrors: true, validateFormats: false });
+    // ajv is CommonJS; under NodeNext its default import is typed as the module, though at run time it is the class.
+    const ajv = new (Ajv as any)({ strict: false, allErrors: true, validateFormats: false });
     ajv.addSchema({ $id: "runta", components: spec.components || {} });
     cache.set(spec, ajv);
   }
@@ -60,7 +61,7 @@ export function validateParam(spec, param, value) {
 }
 
 // Flag values arrive as strings; give them the type the schema asks for.
-export function coerce(value, schema = {}) {
+export function coerce(value: unknown, schema: Record<string, any> = {}) {
   const type = schema.type || (schema.enum ? typeof schema.enum[0] : undefined);
   if (typeof value !== "string") return value;
   if (type === "integer" || type === "number") {

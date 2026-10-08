@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildCommands, findGroup, loadSpec } from "../src/spec.js";
-import { topHelp } from "../src/help.js";
-import { parseArgs } from "../src/args.js";
-import { project } from "../src/output.js";
-import { redactArgv } from "../src/activity.js";
+import { buildCommands, findGroup, loadSpec } from "../dist/spec.js";
+import { topHelp } from "../dist/help.js";
+import { parseArgs } from "../dist/args.js";
+import { project } from "../dist/output.js";
+import { redactArgv } from "../dist/activity.js";
 
 const spec = loadSpec({});
 const groups = buildCommands(spec);

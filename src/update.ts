@@ -24,7 +24,14 @@ function readState(env) {
 }
 
 // Resolves to {latest, current, outdated} or null. Uses the cached answer when it is less than a day old.
-export async function checkForUpdate(env = process.env, { force = false } = {}) {
+export interface UpdateInfo {
+  latest: string;
+  current: string;
+  outdated: boolean;
+}
+
+// Resolves to {latest, current, outdated} or null.
+export async function checkForUpdate(env: NodeJS.ProcessEnv = process.env, { force = false } = {}): Promise<UpdateInfo | null> {
   if (env.RUNTA_NO_UPDATE_CHECK || (env.CI && !force)) return null;
   const state = readState(env);
   let latest = state.latest;

@@ -36,10 +36,10 @@ function apiFailure(res, what) {
 export async function lookupId(client, paramName, value) {
   const lookup = (client.spec["x-name-lookups"] || {})[paramName];
   if (!lookup || value === undefined || isUuid(value)) return value;
-  const matches = [];
+  const matches: any[] = [];
   let cursor;
   for (let page = 0; page < 20; page++) {
-    const q = {};
+    const q: Record<string, any> = {};
     if (cursor) q[lookup.next?.param || "after"] = cursor;
     if (client.command(lookup.operationId).params.some((x) => x.name === "limit")) q.limit = 100;
     const res = await client.call(lookup.operationId, q);
@@ -60,7 +60,7 @@ export async function lookupId(client, paramName, value) {
 }
 
 // Path parameters and top-level body fields whose names have a lookup accept names as well as UUIDs.
-export async function resolveNames(client, cmd, pathValues, onResolved, body) {
+export async function resolveNames(client, cmd, pathValues, onResolved, body?) {
   for (const p of cmd.params.filter((x) => x.in === "path")) {
     const before = pathValues[p.name];
     pathValues[p.name] = await lookupId(client, p.name, before);

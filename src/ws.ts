@@ -10,7 +10,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * Runs one session. Resolves {kind: "exit", code} | {kind: "error", message} | {kind: "http", status, body}
  * | {kind: "incomplete"} | {kind: "timeout"}.
  */
-export async function runSession({ url, token, session, argv, options = {}, stdin = null, timeoutSeconds, maxOutput = 0, out = process.stdout, err = process.stderr }) {
+export async function runSession({ url, token, session, argv, options = {}, stdin = null, timeoutSeconds, maxOutput = 0, out = process.stdout, err = process.stderr }: {
+  url: string; token?: string; session: any; argv: string[]; options?: Record<string, any>; stdin?: NodeJS.ReadableStream | null;
+  timeoutSeconds?: number; maxOutput?: number; out?: NodeJS.WritableStream; err?: NodeJS.WritableStream;
+}) {
   for (let attempt = 1; ; attempt++) {
     const result = await once({ url, token, session, argv, options, stdin, timeoutSeconds, maxOutput, out, err });
     // Overloaded upgrades are retried, as the official client does.
@@ -22,8 +25,11 @@ export async function runSession({ url, token, session, argv, options = {}, stdi
   }
 }
 
-function once({ url, token, session, argv, options, stdin, timeoutSeconds, maxOutput, out, err }) {
-  return new Promise((resolve) => {
+// The session's outcome: {kind: "exit", code} | {kind: "error", message} | {kind: "http", status, body} | ...
+type SessionResult = { kind: string; [key: string]: any };
+
+function once({ url, token, session, argv, options, stdin, timeoutSeconds, maxOutput, out, err }): Promise<SessionResult> {
+  return new Promise<SessionResult>((resolve) => {
     const ws = new WebSocket(url, { headers: { authorization: `Bearer ${token}`, "user-agent": USER_AGENT }, maxPayload: 64 * 1024 * 1024 });
     let settled = false;
     let written = 0;
@@ -50,7 +56,7 @@ function once({ url, token, session, argv, options, stdin, timeoutSeconds, maxOu
       let text = "";
       res.on("data", (c) => (text += c));
       res.on("end", () => {
-        let body = null;
+        let body: string | null = null;
         try {
           body = JSON.parse(text);
         } catch {
@@ -91,7 +97,7 @@ function once({ url, token, session, argv, options, stdin, timeoutSeconds, maxOu
       }
       const type = msg.type;
       if ((session.ignore || []).includes(type)) return;
-      for (const [stream, spec] of Object.entries(session.output || {})) {
+      for (const [stream, spec] of Object.entries<any>(session.output || {})) {
         if (type !== spec.type) continue;
         const bytes = Buffer.from(msg[spec.field] || "", spec.encoding === "base64" ? "base64" : "utf8");
         if (truncated) return;
@@ -113,8 +119,8 @@ function once({ url, token, session, argv, options, stdin, timeoutSeconds, maxOu
 }
 
 // Flag values for fields of the start message (e.g. --env K=V for `env`).
-function mapOptions(mapping = {}, options) {
-  const out = {};
+function mapOptions(mapping: Record<string, string> = {}, options: Record<string, any>) {
+  const out: Record<string, any> = {};
   for (const [flag, field] of Object.entries(mapping)) if (options[flag] !== undefined) out[field] = options[flag];
   return out;
 }

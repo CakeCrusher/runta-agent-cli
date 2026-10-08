@@ -4,10 +4,17 @@ An agent-native CLI for the [Runta](https://runta.com) API, built for Runta's ta
 Agent-Native CLI"). Unofficial; it talks to the public REST API directly and does not wrap the official CLI.
 
 ```sh
-npm install -g github:CakeCrusher/runta-agent-cli   # installs the `runta` command (Node 18.17+)
-export RUNTA_TOKEN=...                               # or: runta login
-runta --help                                          # what Runta is for, then every command group
+npm install -g altrunta     # installs the `runta` and `altrunta` commands (Node 18.17+)
+export RUNTA_TOKEN=...      # or: runta login
+runta --help                # what Runta is for, then every command group
 ```
+
+Published on npm as [`altrunta`](https://www.npmjs.com/package/altrunta). Installing from GitHub also works
+(`npm install -g github:CakeCrusher/runta-agent-cli`); npm builds it on install.
+
+Both commands are the same program. If Runta's official CLI is installed too, its `runta` and this one compete
+for the name: whichever comes first on your `PATH` wins, and npm refuses to overwrite a `runta` installed by
+another npm package unless you pass `--force`. Use `altrunta` to call this CLI unambiguously.
 
 ## The idea: fix the spec, generate the CLI
 
@@ -23,7 +30,7 @@ hand-written CLI code. This CLI therefore has three layers:
    operations on the core paths, plus `x-` extensions the CLI reads. It is the proposal to Runta. Every change
    and its evidence is in [SPEC-CHANGES.md](SPEC-CHANGES.md), and `npm run contract` checks live responses
    against it.
-3. **One generic runtime** (`src/`) that applies the same behavior to every command: exit codes, schema
+3. **One generic runtime** (`src/`, TypeScript) that applies the same behavior to every command: exit codes, schema
    validation, waiting, confirmation, name lookups, streaming, auth, an activity log, a version check.
 
 `RUNTA_SPEC=original runta ...` runs the same CLI on the unedited spec, which isolates what the spec changes
@@ -80,10 +87,16 @@ feedback endpoint yet).
 ## Development
 
 ```sh
-npm install
-npm test              # 32 tests against a fake API (HTTP + exec WebSocket)
+npm install           # also compiles src/*.ts to dist/
+npm run build         # tsc: src/*.ts -> dist/*.js
+npm test              # builds, then 32 tests against a fake API (HTTP + exec WebSocket)
 npm run contract      # live, read-only: responses vs. the edited spec (needs RUNTA_TOKEN)
 npm run build:spec    # YAML -> the JSON the CLI loads
 ```
+
+The code is TypeScript in `src/`, compiled to plain Node in `dist/`; the command tree is still built from the
+bundled spec at run time. Tag `v0.1.3` is the JavaScript version benchmarked in Round 3; the TypeScript
+refactor compiles to the same program (checked by reprinting both without comments and comparing) and is
+published as `altrunta@0.1.3`.
 
 Not yet done: keychain storage on Windows, pagination helpers (`--all`), exec with a TTY.

@@ -36,7 +36,7 @@ const wrap = (text, indent = 0, width = 100) => {
     .map((line) => {
       if (!line.trim()) return "";
       const lead = line.match(/^\s*(- )?/)[0];
-      const out = [];
+      const out: string[] = [];
       let cur = "";
       for (const w of line.trim().split(/\s+/)) {
         if ((cur + " " + w).trim().length + indent + lead.length > width && cur) {
@@ -62,7 +62,7 @@ const oneLine = (t = "") => reflow(t).replace(/\s+/g, " ").trim();
 
 // A flag (or argument) row: the full description wrapped under a fixed column, never cut short.
 function rows(flag, desc, col = 36, width = 112) {
-  const chunks = [];
+  const chunks: string[] = [];
   let cur = "";
   for (const w of (desc || "").split(/\s+/).filter(Boolean)) {
     if (cur && cur.length + 1 + w.length > width - col) {
@@ -123,7 +123,7 @@ function utilities() {
 }
 
 export function topHelp(spec, groups) {
-  const lines = [];
+  const lines: string[] = [];
   lines.push(`runta: CLI for the ${spec.info?.title || "Runta API"}, generated from its OpenAPI spec`, "");
   lines.push(wrap(renderText(spec.info?.description || "", groups), 2), "");
   lines.push("Usage: runta <group> <command> [args] [--flags]      (runta <group> --help lists commands)", "");
@@ -154,10 +154,10 @@ export function groupHelp(group, groups) {
 
 // Enum values with documented meanings anywhere in a response (e.g. a runtime's status).
 function responseMeanings(spec, cmd) {
-  const ok = Object.entries(spec.paths[cmd.path][cmd.method.toLowerCase()].responses || {}).find(([c]) => /^2/.test(c));
+  const ok = Object.entries<any>(spec.paths[cmd.path][cmd.method.toLowerCase()].responses || {}).find(([c]) => /^2/.test(c));
   const schema = ok?.[1]?.content?.["application/json"]?.schema;
   if (!schema) return [];
-  const found = [];
+  const found: [string, Record<string, string>][] = [];
   const walk = (s, path, depth) => {
     s = flat(s);
     if (!s || depth > 4) return;
@@ -184,19 +184,19 @@ export function commandHelp(spec, cmd, groups) {
       lines.push(...rows(`<${p.name}>`, `${oneLine(renderText(p.description || p.schema?.description || "", groups))}${byName}`, 30));
     }
   }
-  const flags = [];
+  const flags: [string, string][] = [];
   for (const p of cmd.params.filter((x) => x.in !== "path")) {
     const auto = p["x-default-from"] ? " Filled in automatically when omitted." : "";
     flags.push([`--${kebab(p.name)} ${typeLabel(p.schema || {})}`, `${p.required && !p["x-default-from"] ? "(required) " : ""}${oneLine(renderText(p.description || "", groups))}${auto}`]);
   }
-  let naming = null;
+  let naming: string | null = null;
   if (cmd.body?.contentType === "application/json") {
     const { props, required } = bodyFields(spec, cmd.body.schema);
     for (const [n, s] of Object.entries(props)) {
       const fs = flat(s);
       const desc = fs.description || (fs.type === "array" ? flat(fs.items).description : "") || "";
       flags.push([`--${kebab(n)} ${typeLabel(fs)}`, `${required.has(n) ? "(required) " : ""}${oneLine(renderText(desc, groups))}`]);
-      if (fs["x-enum-descriptions"]) for (const [v, d] of Object.entries(fs["x-enum-descriptions"])) flags.push([`    ${v}`, renderText(d, groups)]);
+      if (fs["x-enum-descriptions"]) for (const [v, d] of Object.entries<string>(fs["x-enum-descriptions"])) flags.push([`    ${v}`, renderText(d, groups)]);
       const inner = [];
       if (fs.type === "array" && objectish(flat(fs.items))) nestedRows(fs.items, `${n}[]`, 2, groups, inner, false);
       else if (objectish(fs)) nestedRows(fs, kebab(n), 2, groups, inner, true);
@@ -237,8 +237,8 @@ export function commandHelp(spec, cmd, groups) {
 }
 
 function errorMeanings(spec) {
-  for (const item of Object.values(spec.paths || {}))
-    for (const op of Object.values(item)) {
+  for (const item of Object.values<any>(spec.paths || {}))
+    for (const op of Object.values<any>(item)) {
       const s = op?.responses?.default?.content?.["application/json"]?.schema || (op?.responses?.default?.$ref && deref(spec, op.responses.default).content?.["application/json"]?.schema);
       const code = s && flat(deref(spec, s)).properties?.error && flat(flat(deref(spec, s)).properties.error).properties?.code;
       if (code && flat(code)["x-enum-descriptions"]) return flat(code)["x-enum-descriptions"];

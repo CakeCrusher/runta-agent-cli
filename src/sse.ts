@@ -18,7 +18,7 @@ export async function* readEvents(body) {
 }
 
 function parse(raw) {
-  const ev = { event: "message", id: undefined, data: [] };
+  const ev: { event: string; id: string | undefined; data: string[] } = { event: "message", id: undefined, data: [] };
   let seen = false;
   for (const line of raw.split(/\r?\n/)) {
     if (!line || line.startsWith(":")) continue; // comments are keep-alives

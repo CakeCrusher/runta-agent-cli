@@ -28,7 +28,7 @@ export async function main(argv, env = process.env) {
   const started = Date.now();
   const spec = loadSpec(env);
   const groups = buildCommands(spec);
-  const entry = { cli_version: VERSION, argv: redactArgv(argv), agent: detectAgent(env) };
+  const entry: Record<string, any> = { cli_version: VERSION, argv: redactArgv(argv), agent: detectAgent(env) };
   const update = checkForUpdate(env).catch(() => null);
   let code;
   try {
@@ -42,7 +42,7 @@ export async function main(argv, env = process.env) {
   entry.exit_code = code;
   entry.duration_ms = Date.now() - started;
   if (entry.command || entry.utility) logActivity(entry, env);
-  const u = await Promise.race([update, new Promise((r) => setTimeout(r, 300, null))]);
+  const u = await Promise.race([update, new Promise<null>((r) => setTimeout(r, 300, null))]);
   if (u?.outdated) note(`runta-agent-cli ${u.latest} is available (you have ${u.current}): ${INSTALL}`);
   return code;
 }
@@ -90,8 +90,8 @@ async function dispatch({ argv, env, spec, groups, entry }) {
 
   // --- parameters ----------------------------------------------------------------------------------------
   const pathParams = cmd.params.filter((p) => p.in === "path");
-  const values = {};
-  const extra = [];
+  const values: Record<string, any> = {};
+  const extra: string[] = [];
   args.positionals.forEach((v, i) => (i < pathParams.length ? (values[pathParams[i].name] = v) : extra.push(v)));
   for (const p of cmd.params) if (args.values.has(p.name)) values[p.name] = args.values.get(p.name);
   if (extra.length && !cmd.websocket) throw usageError(`unexpected argument${extra.length > 1 ? "s" : ""}: ${extra.join(" ")}`, { hint: `runta ${cmd.group} ${cmd.name} --help` });
@@ -149,7 +149,7 @@ async function dispatch({ argv, env, spec, groups, entry }) {
     return exitForStatus(res.status);
   }
   if (cmd.sse) {
-    for await (const ev of readEvents(res.res.body)) printJson(ev, out);
+    for await (const ev of readEvents(res.res!.body)) printJson(ev, out);
     return EXIT.ok;
   }
   if (res.buffer) {
@@ -300,9 +300,9 @@ async function utility(name, rest, { env, spec, groups, entry }) {
       const [method, path] = opts.positionals;
       if (!method || !path) throw usageError("usage: runta api <METHOD> <path> [--data JSON] [--query key=value ...]");
       const client = makeClient({ spec, groups, env, flag, needAuth: true });
-      const query = Object.fromEntries((opts.multi.query || []).map((kv) => kv.split(/=(.*)/s, 2)));
+      const query = Object.fromEntries((opts.multi.query || []).map((kv) => (kv as string).split(/=(.*)/s, 2)));
       const url = new URL(path.replace(/^\//, ""), client.endpoint.replace(/\/?$/, "/"));
-      for (const [k, v] of Object.entries(query)) url.searchParams.append(k, v);
+      for (const [k, v] of Object.entries<string>(query)) url.searchParams.append(k, v);
       const body = flag("data") !== undefined ? readData(flag("data"), "application/json") : undefined;
       if (flag("dry-run")) {
         printJson({ dry_run: true, method: method.toUpperCase(), url: url.toString(), body: body ?? null }, out);
@@ -351,10 +351,10 @@ async function utility(name, rest, { env, spec, groups, entry }) {
 }
 
 // Utilities take simple flags: --name value, --name=value, bare --flag, repeated flags collected in multi.
-function parseLoose(argv) {
-  const flags = {};
-  const multi = {};
-  const positionals = [];
+function parseLoose(argv: string[]) {
+  const flags: Record<string, any> = {};
+  const multi: Record<string, (string | true)[]> = {};
+  const positionals: string[] = [];
   const BOOL = new Set(["help", "no-wait", "resume", "with-token", "revoke", "pretty", "dry-run", "json"]);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -386,7 +386,7 @@ async function login(opts, { env, spec, groups, out }) {
     return EXIT.ok;
   }
   const pendingFile = join(stateDir(env), "login-pending.json");
-  let pending;
+  let pending: any;
   if (flag("resume")) {
     try {
       pending = JSON.parse(readFileSync(pendingFile, "utf8"));
@@ -435,7 +435,7 @@ async function login(opts, { env, spec, groups, out }) {
 async function doctor({ env, spec, groups, flag, out }) {
   const endpoint = flag("endpoint") || env.RUNTA_ENDPOINT || spec.servers?.[0]?.url || "https://api.runta.com";
   const cred = resolveToken(flag("token"), env);
-  const report = { cli_version: VERSION, node: process.versions.node, endpoint, spec: spec["x-loaded-from"], agent: detectAgent(env), credential: cred ? { source: cred.source } : null };
+  const report: Record<string, any> = { cli_version: VERSION, node: process.versions.node, endpoint, spec: spec["x-loaded-from"], agent: detectAgent(env), credential: cred ? { source: cred.source } : null };
   const client = new Client({ spec, groups, endpoint, token: cred?.token });
   const health = await request({ method: "GET", url: client.url(client.command("healthz")) }).catch((e) => ({ status: 0, error: e.message }));
   report.api = { reachable: health.status === 200, status: health.status };

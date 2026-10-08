@@ -24,8 +24,33 @@ export function buildUrl(endpoint, path, query = {}) {
  * Sends a request. Retries 429/5xx up to 3 times when repeating is safe (GET/HEAD/PUT/DELETE, or any
  * request carrying an Idempotency-Key). Returns {status, headers, body, text, requestId, attempts}.
  */
-export async function request({ method, url, token, headers = {}, body, contentType, timeoutMs = 60_000, stream = false }) {
-  const h = { "user-agent": USER_AGENT, accept: "application/json", ...headers };
+// What request() returns: parsed JSON in body (text responses keep text), raw bytes in buffer, or the open
+// response in res when streaming.
+export interface HttpResponse {
+  status: number;
+  headers: Headers;
+  body?: any;
+  text?: string;
+  buffer?: Buffer;
+  res?: Response;
+  requestId?: string | null;
+  attempts: number;
+  contentType?: string | null;
+}
+
+export interface RequestOptions {
+  method: string;
+  url: string;
+  token?: string | null;
+  headers?: Record<string, string>;
+  body?: unknown;
+  contentType?: string | null;
+  timeoutMs?: number;
+  stream?: boolean;
+}
+
+export async function request({ method, url, token, headers = {}, body, contentType, timeoutMs = 60_000, stream = false }: RequestOptions): Promise<HttpResponse> {
+  const h: Record<string, string> = { "user-agent": USER_AGENT, accept: "application/json", ...headers };
   if (token) h.authorization = `Bearer ${token}`;
   let payload;
   if (body !== undefined) {

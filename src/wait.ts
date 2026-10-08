@@ -18,7 +18,7 @@ function holds(cond, res) {
  * Returns {outcome: "done"|"failed"|"timeout", res, waitedMs}. Transient errors (429/5xx) keep polling;
  * other errors stop the wait with that error.
  */
-export async function waitFor(client, spec, ctx, { timeoutSeconds, onState } = {}) {
+export async function waitFor(client, spec, ctx, { timeoutSeconds, onState }: { timeoutSeconds?: number; onState?: (state: string, elapsedMs: number) => void } = {}) {
   const params = evaluateAll(spec.parameters, ctx);
   const limitMs = (timeoutSeconds ?? spec.timeoutSeconds ?? 300) * 1000;
   const watched = (spec.until || []).find((c) => c.pointer)?.pointer;

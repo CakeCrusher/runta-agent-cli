@@ -49,7 +49,7 @@ export function flagTable(spec, cmd) {
     add("timeout", { kind: "global", schema: { type: "number" } });
     add("max-output", { kind: "global", schema: { type: "integer" } });
     add("stdin", { kind: "global", schema: { type: "boolean" } });
-    for (const [flag, field] of Object.entries(cmd.websocket.session?.start?.options || {})) {
+    for (const [flag, field] of Object.entries<string>(cmd.websocket.session?.start?.options || {})) {
       const props = startMessageProps(spec, cmd);
       add(flag, { kind: "ws", field, schema: props[field] || { type: "string" } });
     }
@@ -71,9 +71,9 @@ const isBool = (entry) => flat(entry?.schema).type === "boolean";
 
 export function parseArgs(spec, cmd, argv) {
   const table = flagTable(spec, cmd);
-  const positionals = [];
+  const positionals: string[] = [];
   const values = new Map(); // flag name -> value (arrays and objects accumulate)
-  const nested = []; // [path parts, raw value] for dotted body flags
+  const nested: [string[], string, any][] = []; // [path parts, raw value] for dotted body flags
   let trailing = null;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];

@@ -3,11 +3,12 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { Command, Env, Group, Groups, OpenApi } from "./types.js";
 
 const SPEC_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "spec");
 const METHODS = ["get", "post", "put", "patch", "delete", "head"];
 
-export function loadSpec(env = process.env) {
+export function loadSpec(env: Env = process.env): OpenApi {
   const file = env.RUNTA_SPEC_FILE
     || join(SPEC_DIR, env.RUNTA_SPEC === "original" ? "runta-openapi.original.json" : "runta-openapi.json");
   const spec = JSON.parse(readFileSync(file, "utf8"));
@@ -15,13 +16,13 @@ export function loadSpec(env = process.env) {
   return spec;
 }
 
-export function resolveRef(spec, ref) {
+export function resolveRef(spec: OpenApi, ref: string): any {
   if (!ref.startsWith("#/")) throw new Error(`external $ref not supported: ${ref}`);
   return ref.slice(2).split("/").reduce((node, key) => node?.[key.replace(/~1/g, "/").replace(/~0/g, "~")], spec);
 }
 
 // Fully inlines $refs (cycles are cut with a {$ref} stub) so help and validation see one schema.
-export function deref(spec, node, seen = new Set()) {
+export function deref(spec: OpenApi, node: any, seen: Set<string> = new Set()): any {
   if (Array.isArray(node)) return node.map((n) => deref(spec, n, seen));
   if (!node || typeof node !== "object") return node;
   if (node.$ref) {
@@ -29,24 +30,24 @@ export function deref(spec, node, seen = new Set()) {
     const next = new Set(seen).add(node.$ref);
     return deref(spec, resolveRef(spec, node.$ref), next);
   }
-  const out = {};
+  const out: Record<string, any> = {};
   for (const [k, v] of Object.entries(node)) out[k] = deref(spec, v, seen);
   return out;
 }
 
 // --- naming -------------------------------------------------------------------------------------------
-export const kebab = (s) => s.replace(/([a-z0-9])([A-Z])/g, "$1-$2").replace(/[\s_]+/g, "-").toLowerCase();
-const words = (s) => kebab(s).split("-").filter(Boolean);
-const singular = (w) => (w.endsWith("ies") ? w.slice(0, -3) + "y" : w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+export const kebab = (s: string): string => s.replace(/([a-z0-9])([A-Z])/g, "$1-$2").replace(/[\s_]+/g, "-").toLowerCase();
+const words = (s: string): string[] => kebab(s).split("-").filter(Boolean);
+const singular = (w: string): string => (w.endsWith("ies") ? w.slice(0, -3) + "y" : w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
 // Words that add nothing to a command name (every event is an organization event).
 const FILLER = new Set(["organization"]);
 
-export const groupName = (tag) => tag.trim().toLowerCase().replace(/\s+/g, "-");
+export const groupName = (tag: string): string => tag.trim().toLowerCase().replace(/\s+/g, "-");
 
 // Candidate names, most preferred first: drop the group's own words ("createCloudAgentRun" in Cloud Agents
 // -> "create-run"), then also the parent resource of the path ("readRuntimeFile" on /runtimes/{id}/files ->
 // "read"), falling back to the full operationId when names collide.
-function dropWords(tokens, drop) {
+function dropWords(tokens: string[], drop: Set<string>): string[] {
   // Removes whole words, also when the spec splits one word in two ("GitHub" -> "git", "hub").
   const out = [tokens[0]];
   for (let i = 1; i < tokens.length; i++) {
@@ -57,7 +58,7 @@ function dropWords(tokens, drop) {
   return out;
 }
 
-function nameCandidates(operationId, tag, path) {
+function nameCandidates(operationId: string, tag: string, path: string): string[] {
   const tokens = words(operationId);
   const groupWords = new Set(tag.toLowerCase().split(/\s+/).map(singular));
   const base = dropWords(tokens, new Set([...groupWords, ...FILLER]));
@@ -73,9 +74,9 @@ function nameCandidates(operationId, tag, path) {
 }
 
 // --- commands -------------------------------------------------------------------------------------------
-export function buildCommands(spec) {
-  const groups = new Map();
-  for (const [path, item] of Object.entries(spec.paths || {})) {
+export function buildCommands(spec: OpenApi): Groups {
+  const groups: Groups = new Map();
+  for (const [path, item] of Object.entries<any>(spec.paths || {})) {
     for (const method of METHODS) {
       const op = item[method];
       if (!op) continue;
@@ -88,9 +89,9 @@ export function buildCommands(spec) {
       const params = [...(item.parameters || []), ...(op.parameters || [])].map((p) => (p.$ref ? resolveRef(spec, p.$ref) : p));
       const body = op.requestBody?.$ref ? resolveRef(spec, op.requestBody.$ref) : op.requestBody;
       const bodyType = body?.content ? Object.keys(body.content)[0] : null;
-      const okResponses = Object.entries(op.responses || {}).filter(([code]) => /^[12]/.test(code));
+      const okResponses = Object.entries<any>(op.responses || {}).filter(([code]) => /^[12]/.test(code));
       const responseTypes = okResponses.flatMap(([, r]) => Object.keys(r.content || {}));
-      groups.get(group).commands.set(op.operationId, {
+      groups.get(group)!.commands.set(op.operationId, {
         operationId: op.operationId,
         method: method.toUpperCase(),
         path,
@@ -99,7 +100,7 @@ export function buildCommands(spec) {
         summary: op.summary || "",
         description: op.description || "",
         params,
-        body: body ? { required: !!body.required, contentType: bodyType, schema: body.content?.[bodyType]?.schema } : null,
+        body: body ? { required: !!body.required, contentType: bodyType, schema: body.content?.[bodyType!]?.schema } : null,
         responseTypes,
         sse: responseTypes.includes("text/event-stream"),
         binary: responseTypes.includes("application/octet-stream"),
@@ -108,17 +109,17 @@ export function buildCommands(spec) {
         destructive: op["x-destructive"] ?? method === "delete",
         // No security requirement (or an empty one) means the operation needs no credential.
         noAuth: (op.security ?? spec.security ?? []).length === 0 || (op.security ?? spec.security).some((r) => Object.keys(r).length === 0),
-      });
+      } as Command);
     }
   }
   for (const g of groups.values()) {
     const cmds = [...g.commands.values()];
     const cands = new Map(cmds.map((c) => [c, nameCandidates(c.operationId, g.tag, c.path)]));
-    const count = (k, n) => cmds.filter((c) => cands.get(c)[k] === n).length;
-    const named = new Map();
+    const count = (k: number, n: string) => cmds.filter((c) => cands.get(c)![k] === n).length;
+    const named = new Map<string, Command>();
     for (const cmd of cmds) {
-      const [short, base, full] = cands.get(cmd);
-      const shortOk = count(0, short) === 1 && !cmds.some((o) => o !== cmd && cands.get(o)[1] === short);
+      const [short, base, full] = cands.get(cmd)!;
+      const shortOk = count(0, short) === 1 && !cmds.some((o) => o !== cmd && cands.get(o)![1] === short);
       cmd.name = shortOk ? short : count(1, base) === 1 ? base : full;
       named.set(cmd.name, cmd);
     }
@@ -136,20 +137,20 @@ export function buildCommands(spec) {
   return new Map([...groups.entries()].sort(([a], [b]) => a.localeCompare(b)));
 }
 
-export function findGroup(groups, name) {
-  if (groups.has(name)) return groups.get(name);
+export function findGroup(groups: Groups, name: string): Group | null {
+  if (groups.has(name)) return groups.get(name)!;
   for (const g of groups.values()) if (g.aliases.includes(name)) return g;
   return null;
 }
 
-export function commandByOperationId(groups, operationId) {
+export function commandByOperationId(groups: Groups, operationId: string): Command | null {
   for (const g of groups.values()) for (const c of g.commands.values()) if (c.operationId === operationId) return c;
   return null;
 }
 
 // Closest name by edit distance, for "did you mean" hints.
-export function closest(name, candidates) {
-  const dist = (a, b) => {
+export function closest(name: string, candidates: Iterable<string>): string | null {
+  const dist = (a: string, b: string): number => {
     const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
     for (let j = 1; j <= b.length; j++) d[0][j] = j;
     for (let i = 1; i <= a.length; i++)
@@ -159,8 +160,8 @@ export function closest(name, candidates) {
   };
   // Separators don't count (model-provider-protocol vs model_provider_protocol), and containment only counts for
   // names long enough not to match by accident ("id" is inside "provider").
-  const norm = (s) => s.toLowerCase().replace(/[-_\s]/g, "");
-  let best = null;
+  const norm = (s: string): string => s.toLowerCase().replace(/[-_\s]/g, "");
+  let best: { c: string; score: number } | null = null;
   for (const c of candidates) {
     const a = norm(name), b = norm(c);
     const score = a === b ? -1 : Math.min(a.length, b.length) >= 4 && (b.includes(a) || a.includes(b)) ? 0 : dist(a, b);
@@ -170,13 +171,13 @@ export function closest(name, candidates) {
 }
 
 // Verbs other CLIs (and agents) use for the action a generated command performs.
-const SYNONYMS = {
+const SYNONYMS: Record<string, string> = {
   upload: "write", put: "write", download: "read", cat: "read", ls: "list", ps: "list", rm: "delete", remove: "delete",
   del: "delete", inspect: "get", show: "get", describe: "get", info: "get", new: "create", add: "create", run: "create",
   kill: "stop", halt: "stop", update: "patch",
 };
 
-export function suggestCommand(group, name) {
+export function suggestCommand(group: Group, name: string): string | null {
   const names = [...group.commands.keys()];
   const [verb, ...rest] = name.split("-");
   const mapped = [SYNONYMS[verb] || verb, ...rest].join("-");
@@ -187,17 +188,17 @@ export function suggestCommand(group, name) {
 }
 
 // The official CLI's top-level verbs all act on runtimes (or files); point their habits at the generated commands.
-export const OFFICIAL_VERBS = {
+export const OFFICIAL_VERBS: Record<string, string> = {
   ps: "runtimes list", run: "runtimes create", rm: "runtimes delete", inspect: "runtimes get", exec: "runtimes exec",
   pause: "runtimes pause", resume: "runtimes resume", boot: "runtimes start", shutdown: "runtimes stop",
   cp: "files write / files read", ports: "runtimes patch (--ingress-specs)",
 };
 
 // Commands whose name, flags or summary mention a word, best matches first ("ingress" -> create/patch via --ingress-specs).
-export function relatedCommands(spec, groups, word, { only, limit = 3 } = {}) {
+export function relatedCommands(spec: OpenApi, groups: Groups, word: string, { only, limit = 3 }: { only?: Group | null; limit?: number } = {}): string[] {
   const w = word.toLowerCase().replace(/^-+/, "").replace(/-/g, "_");
   if (w.length < 3) return [];
-  const hits = [];
+  const hits: { score: number; text: string }[] = [];
   for (const g of groups.values()) {
     if (only && g !== only) continue;
     for (const c of g.commands.values()) {

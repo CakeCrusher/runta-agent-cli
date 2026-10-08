@@ -10,7 +10,7 @@ export function project(value, fields) {
   return out;
 }
 
-function copyPath(target, source, [head, ...rest]) {
+function copyPath(target: any, source: any, [head, ...rest]: string[]) {
   const src = source?.[head];
   if (src === undefined) return;
   if (!rest.length) {
@@ -31,7 +31,7 @@ export function truncateStrings(value, max) {
   return value;
 }
 
-export function render(value, { fields, truncate, pretty } = {}) {
+export function render(value: unknown, { fields, truncate, pretty }: { fields?: string[]; truncate?: number | false; pretty?: boolean } = {}) {
   const v = truncateStrings(project(value, fields), truncate);
   return pretty ? JSON.stringify(v, null, 2) : JSON.stringify(v);
 }
