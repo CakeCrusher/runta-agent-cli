@@ -88,8 +88,8 @@ feedback endpoint yet).
 
 ```sh
 npm install
-npm run build         # tsc: src/*.ts -> dist/*.js (commit dist/ with the change; npm run check:dist verifies)
-npm test              # builds, then 32 tests against a fake API (HTTP + exec WebSocket)
+npm run compile       # tsc: src/*.ts -> dist/*.js (commit dist/ with the change; npm run check:dist verifies)
+npm test              # compiles, then 32 tests against a fake API (HTTP + exec WebSocket)
 npm run contract      # live, read-only: responses vs. the edited spec (needs RUNTA_TOKEN)
 npm run build:spec    # YAML -> the JSON the CLI loads
 ```
