@@ -10,7 +10,7 @@ runta --help                # what Runta is for, then every command group
 ```
 
 Published on npm as [`altrunta`](https://www.npmjs.com/package/altrunta). Installing from GitHub also works
-(`npm install -g github:CakeCrusher/runta-agent-cli`); npm builds it on install.
+(`npm install -g github:CakeCrusher/runta-agent-cli`): the compiled `dist/` is committed, so nothing is built on install.
 
 Both commands are the same program. If Runta's official CLI is installed too, its `runta` and this one compete
 for the name: whichever comes first on your `PATH` wins, and npm refuses to overwrite a `runta` installed by
@@ -87,8 +87,8 @@ feedback endpoint yet).
 ## Development
 
 ```sh
-npm install           # also compiles src/*.ts to dist/
-npm run build         # tsc: src/*.ts -> dist/*.js
+npm install
+npm run build         # tsc: src/*.ts -> dist/*.js (commit dist/ with the change; npm run check:dist verifies)
 npm test              # builds, then 32 tests against a fake API (HTTP + exec WebSocket)
 npm run contract      # live, read-only: responses vs. the edited spec (needs RUNTA_TOKEN)
 npm run build:spec    # YAML -> the JSON the CLI loads
