@@ -1,4 +1,6 @@
-# runta-agent-cli
+# altrunta (runta-agent-cli)
+
+[![npm](https://img.shields.io/npm/v/altrunta)](https://www.npmjs.com/package/altrunta)
 
 An agent-native CLI for the [Runta](https://runta.com) API, built for Runta's take-home ("Build an
 Agent-Native CLI"). Unofficial; it talks to the public REST API directly and does not wrap the official CLI.
@@ -15,6 +17,7 @@ Published on npm as [`altrunta`](https://www.npmjs.com/package/altrunta). Instal
 Both commands are the same program. If Runta's official CLI is installed too, its `runta` and this one compete
 for the name: whichever comes first on your `PATH` wins, and npm refuses to overwrite a `runta` installed by
 another npm package unless you pass `--force`. Use `altrunta` to call this CLI unambiguously.
+Switching from an earlier GitHub install? Remove it first (`npm uninstall -g runta-agent-cli`), since both own the `runta` command.
 
 ## The idea: fix the spec, generate the CLI
 
